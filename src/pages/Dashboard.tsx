@@ -64,6 +64,12 @@ export default function Dashboard() {
   const meses = fin.data ?? [];
   const doMes = meses.find((m) => m.mes.slice(0, 7) === mesAtual);
   const aReceber = meses.reduce((s, m) => s + (m.faturamento - m.recebido), 0);
+
+  // Margem e markup do mês — derivados das vendas (preço) × compras (custo).
+  const fat = doMes?.faturamento ?? 0;
+  const custoTotal = (doMes?.cmv ?? 0) + (doMes?.custo_entrega ?? 0);
+  const margem = fat > 0 ? ((doMes?.lucro_liquido ?? 0) / fat) * 100 : null;
+  const markup = custoTotal > 0 ? fat / custoTotal : null;
   const grafico = meses.slice(-6).map((m) => ({
     nome: mesBR(m.mes),
     Faturamento: m.faturamento,
@@ -77,11 +83,21 @@ export default function Dashboard() {
         <p className="text-sm text-muted-foreground">{mesBR(hoje)}</p>
       </header>
 
-      {/* KPIs do mês */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi titulo="Faturamento" valor={brl(doMes?.faturamento)} />
+      {/* KPIs do mês — margem e markup derivam de vendas × custos das outras abas */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <Kpi titulo="Faturamento" valor={brl(fat)} />
         <Kpi titulo="Lucro líquido" valor={brl(doMes?.lucro_liquido)} destaque />
-        <Kpi titulo="Custo (CMV + entrega)" valor={brl((doMes?.cmv ?? 0) + (doMes?.custo_entrega ?? 0))} />
+        <Kpi
+          titulo="Margem de lucro"
+          valor={margem === null ? "—" : `${margem.toFixed(1).replace(".", ",")}%`}
+          hint="lucro ÷ faturamento"
+        />
+        <Kpi
+          titulo="Markup"
+          valor={markup === null ? "—" : `${markup.toFixed(2).replace(".", ",")}×`}
+          hint="faturamento ÷ custo"
+        />
+        <Kpi titulo="Custo (produto + entrega)" valor={brl(custoTotal)} />
         <Kpi titulo="A receber (total)" valor={brl(aReceber)} alerta={aReceber > 0} />
       </div>
 
@@ -194,11 +210,13 @@ function Kpi({
   valor,
   destaque = false,
   alerta = false,
+  hint,
 }: {
   titulo: string;
   valor: string;
   destaque?: boolean;
   alerta?: boolean;
+  hint?: string;
 }) {
   return (
     <Card className={destaque ? "outline outline-1 outline-gold/40" : ""}>
@@ -210,6 +228,7 @@ function Kpi({
       >
         {valor}
       </p>
+      {hint && <p className="mt-0.5 text-[11px] text-muted-foreground/70">{hint}</p>}
     </Card>
   );
 }
