@@ -15,6 +15,7 @@ import {
   Loading,
   Modal,
   Select,
+  useConfirm,
 } from "@/components/ui";
 
 interface ItemForm {
@@ -38,6 +39,7 @@ const compraSchema = z.object({
 
 export default function Compras() {
   const qc = useQueryClient();
+  const confirmar = useConfirm();
   const [modal, setModal] = useState(false);
   const [modalForn, setModalForn] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -206,8 +208,8 @@ export default function Compras() {
                     <span className="font-mono-numbers font-medium">{brl(totalItens + c.frete)}</span>
                     <button
                       aria-label="Excluir compra"
-                      onClick={() => {
-                        if (confirm("Excluir esta compra? O estoque dos itens é revertido.")) {
+                      onClick={async () => {
+                        if (await confirmar({ titulo: "Excluir esta compra?", mensagem: "O estoque dos itens é revertido." })) {
                           excluirCompra.mutate(c.id);
                         }
                       }}

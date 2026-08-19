@@ -24,6 +24,7 @@ import {
   Loading,
   Modal,
   Select,
+  useConfirm,
 } from "@/components/ui";
 
 const movSchema = z.object({
@@ -42,6 +43,7 @@ const tipoLabel: Record<MovTipo, string> = {
 
 export default function Financeiro() {
   const qc = useQueryClient();
+  const confirmar = useConfirm();
   const [modal, setModal] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -265,8 +267,8 @@ export default function Financeiro() {
                     </span>
                     <button
                       aria-label="Excluir lançamento"
-                      onClick={() => {
-                        if (confirm("Excluir este lançamento?")) excluir.mutate(m.id);
+                      onClick={async () => {
+                        if (await confirmar({ titulo: "Excluir este lançamento?" })) excluir.mutate(m.id);
                       }}
                       className="press flex h-8 w-8 items-center justify-center rounded-[var(--r-chip)] text-muted-foreground hover:bg-cost-light hover:text-cost"
                     >

@@ -16,6 +16,7 @@ import {
   Loading,
   Modal,
   Select,
+  useConfirm,
 } from "@/components/ui";
 
 const schema = z.object({
@@ -40,6 +41,7 @@ const formVazio = {
 
 export default function Produtos() {
   const qc = useQueryClient();
+  const confirmar = useConfirm();
   const [busca, setBusca] = useState("");
   const [modal, setModal] = useState(false);
   const [editando, setEditando] = useState<Produto | null>(null);
@@ -297,8 +299,8 @@ export default function Produtos() {
               <Button
                 type="button"
                 variant="destructive"
-                onClick={() => {
-                  if (confirm("Arquivar este produto? Ele some da lista mas o histórico de vendas fica intacto.")) {
+                onClick={async () => {
+                  if (await confirmar({ titulo: "Arquivar este produto?", mensagem: "Ele some da lista, mas o histórico de vendas fica intacto.", acao: "Arquivar" })) {
                     arquivar.mutate(editando.id);
                   }
                 }}

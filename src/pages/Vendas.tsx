@@ -16,6 +16,7 @@ import {
   Loading,
   Modal,
   Select,
+  useConfirm,
 } from "@/components/ui";
 
 interface ItemForm {
@@ -45,6 +46,7 @@ const statusTone = { pago: "success", parcial: "warning", pendente: "danger" } a
 
 export default function Vendas() {
   const qc = useQueryClient();
+  const confirmar = useConfirm();
   const [modal, setModal] = useState(false);
   const [detalhe, setDetalhe] = useState<Venda | null>(null);
   const [filtroMes, setFiltroMes] = useState<string>("");
@@ -286,8 +288,8 @@ export default function Vendas() {
         {detalhe && (
           <DetalheVenda
             venda={detalhe}
-            onExcluir={() => {
-              if (confirm("Excluir esta venda? O estoque dos itens volta automaticamente.")) {
+            onExcluir={async () => {
+              if (await confirmar({ titulo: "Excluir esta venda?", mensagem: "O estoque dos itens volta automaticamente." })) {
                 excluir.mutate(detalhe.id);
               }
             }}

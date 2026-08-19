@@ -11,7 +11,7 @@ import Compras from "@/pages/Compras";
 import Financeiro from "@/pages/Financeiro";
 import Projecao from "@/pages/Projecao";
 import Ajustes from "@/pages/Ajustes";
-import { Loading } from "@/components/ui";
+import { ConfirmProvider, Loading } from "@/components/ui";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,6 +30,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        <ConfirmProvider>
         <BrowserRouter>
           <Routes>
             <Route element={<Protegido />}>
@@ -45,6 +46,7 @@ export default function App() {
             </Route>
           </Routes>
         </BrowserRouter>
+        </ConfirmProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

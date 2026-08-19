@@ -3,6 +3,10 @@
  * Sem biblioteca de componentes: 9 peças cobrem o app inteiro.
  */
 import {
+  createContext,
+  useCallback,
+  useContext,
+  useState,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
@@ -140,6 +144,78 @@ export function Modal({
     </div>
   );
 }
+
+/* ------------------------------------------------------ Confirmação
+   Substitui o confirm() nativo do navegador por um dialog no padrão do
+   design system. Uso: const confirmar = useConfirm();
+   if (await confirmar({ titulo: "Excluir venda?" })) { ... } */
+
+interface ConfirmOpts {
+  titulo: string;
+  mensagem?: string;
+  acao?: string; // rótulo do botão destrutivo (default "Excluir")
+}
+
+const ConfirmCtx = createContext<(opts: ConfirmOpts) => Promise<boolean>>(() =>
+  Promise.resolve(false)
+);
+
+export function ConfirmProvider({ children }: { children: ReactNode }) {
+  const [pendente, setPendente] = useState<{
+    opts: ConfirmOpts;
+    resolve: (v: boolean) => void;
+  } | null>(null);
+
+  const confirmar = useCallback(
+    (opts: ConfirmOpts) => new Promise<boolean>((resolve) => setPendente({ opts, resolve })),
+    []
+  );
+
+  function responder(v: boolean) {
+    pendente?.resolve(v);
+    setPendente(null);
+  }
+
+  useEffect(() => {
+    if (!pendente) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && responder(false);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendente]);
+
+  return (
+    <ConfirmCtx.Provider value={confirmar}>
+      {children}
+      {pendente && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center px-6">
+          <div className="mat-scrim absolute inset-0 will-fade animate-materialize" onClick={() => responder(false)} />
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-label={pendente.opts.titulo}
+            className="mat-sheet relative z-10 w-full max-w-xs rounded-[var(--r-window)] p-6 animate-fade-in-up"
+          >
+            <h2 className="vibrant text-lg">{pendente.opts.titulo}</h2>
+            {pendente.opts.mensagem && (
+              <p className="mt-1.5 text-sm text-muted-foreground">{pendente.opts.mensagem}</p>
+            )}
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <Button variant="secondary" onClick={() => responder(false)} autoFocus>
+                Cancelar
+              </Button>
+              <Button variant="destructive" onClick={() => responder(true)}>
+                {pendente.opts.acao ?? "Excluir"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </ConfirmCtx.Provider>
+  );
+}
+
+export const useConfirm = () => useContext(ConfirmCtx);
 
 /* ---------------------------------------------------------------- Badge */
 
