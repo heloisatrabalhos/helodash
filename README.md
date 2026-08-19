@@ -8,3 +8,5 @@ follow-up e financeiro (caixa, despesas, lucro). Mobile-first, PT-BR.
 - **Banco:** migration em `supabase/migrations/` — RLS em todas as tabelas, estoque e
   snapshot de custo resolvidos por trigger no banco.
 - **Plano/checklist:** `PLANO.md` e `CHECKLIST.md`
+
+<!-- prod: helodash.vercel.app -->
