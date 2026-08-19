@@ -11,11 +11,11 @@
 - [x] Favicon "hD" (só a escrita, como pedido)
 - [x] Localhost no ar
 
-## Fase 2 — Banco (Supabase) 🔶 aguardando 1 acesso
+## Fase 2 — Banco (Supabase) ✅
 - [x] Migration escrita: 8 tabelas + RLS em todas + triggers de estoque + snapshot de custo + view financeira
-- [ ] **BLOQUEADO** → aplicar no projeto `wzrtvhrkdjagmawxdnrj` (preciso do access token — ver nota no fim)
-- [ ] Usuária criada (e-mail + senha da Heloísa)
-- [ ] Verificação: RLS testada, estoque sobe/desce via trigger
+- [x] Migration aplicada no projeto `wzrtvhrkdjagmawxdnrj` (via SQL Editor, sessão sua) ✅
+- [x] Login criado (joaovictordems@gmail.com) — autenticação testada no navegador ✅
+- [x] Verificação: 19/19 testes E2E — RLS, triggers de estoque, snapshot, view financeira com números conferidos na mão ✅
 
 ## Fase 3 — Auth + shell ✅ (código pronto; testa após Fase 2)
 - [x] Login e-mail/senha, sessão persistente, logout limpa cache
@@ -31,14 +31,14 @@
 - [x] **Financeiro** — caixa atual, investido, lucro acumulado, a receber, aportes/retiradas/despesas, gráfico de evolução, tabela mês a mês
 - [x] **Ajustes** — tema, export CSV (backup), sair
 
-## Fase 5 — Verificação de qualidade ⏳
-- [ ] Typecheck limpo (`tsc`)
-- [ ] Teste visual desktop + mobile (viewport real)
-- [ ] Fluxo completo com dados reais: fornecedor → produto → compra → cliente → venda → financeiro bate
-- [ ] Conferência manual dos números (3 vendas na mão vs. tela)
+## Fase 5 — Verificação de qualidade ✅
+- [x] Typecheck limpo (`tsc`)
+- [x] Teste visual desktop (1280px) + mobile (390px) ✅
+- [x] Fluxo completo testado: fornecedor → produto → compra → cliente → venda → financeiro batendo ✅
+- [x] Conferência manual: faturamento 450, CMV 80, lucro líquido 325, caixa 435 — exatos ✅
 
 ## Fase 6 — GitHub + deploy ⏳
-- [ ] `git init` + primeiro commit + push pro `heloisatrabalhos/helodash`
+- [x] `git init` + commit + push pro `heloisatrabalhos/helodash` ✅
 - [ ] ⚠️ Repo está **Public** → trocar pra Private (Settings do repo)
 - [ ] Vercel: você conecta o repo (env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`)
 - [ ] GitHub Action de ping semanal (Supabase free não pausa)
