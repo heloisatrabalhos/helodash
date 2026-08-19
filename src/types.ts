@@ -108,11 +108,18 @@ export interface ProjecaoExtra {
   valor: number;
 }
 
+export interface ProjecaoOferta {
+  peca: string;
+  leve: number;
+  preco: number;
+}
+
 export interface Projecao {
   id: string;
   nome: string;
   itens: ProjecaoItem[];
   extras: ProjecaoExtra[];
+  ofertas: ProjecaoOferta[];
   margem_desejada: number;
   obs: string | null;
   criado_em: string;

@@ -27,6 +27,12 @@ interface ExtraForm {
   valor: string;
 }
 
+interface OfertaForm {
+  peca: string; // descrição da linha da planilha
+  leve: string;
+  preco: string;
+}
+
 const itemVazio: ItemForm = { descricao: "", qtd: "", custo: "", preco: "" };
 
 function calcular(itens: ItemForm[], extras: ExtraForm[]) {
@@ -60,10 +66,15 @@ function paraForm(p: Projecao) {
       descricao: e.descricao,
       valor: e.valor ? String(e.valor).replace(".", ",") : "",
     })),
+    ofertas: (p.ofertas ?? []).map((o) => ({
+      peca: o.peca,
+      leve: o.leve ? String(o.leve) : "",
+      preco: o.preco ? String(o.preco).replace(".", ",") : "",
+    })),
   };
 }
 
-function paraBanco(nome: string, itens: ItemForm[], extras: ExtraForm[], margem: string) {
+function paraBanco(nome: string, itens: ItemForm[], extras: ExtraForm[], margem: string, ofertas: OfertaForm[]) {
   return {
     nome: nome.trim() || "Sem nome",
     margem_desejada: Math.min(Math.max(parseValor(margem) || 50, 1), 95),
@@ -78,6 +89,9 @@ function paraBanco(nome: string, itens: ItemForm[], extras: ExtraForm[], margem:
     extras: extras
       .filter((e) => e.descricao.trim() || e.valor)
       .map((e) => ({ descricao: e.descricao.trim(), valor: parseValor(e.valor) })),
+    ofertas: ofertas
+      .filter((o) => o.peca || o.leve || o.preco)
+      .map((o) => ({ peca: o.peca, leve: Number(o.leve || 0), preco: parseValor(o.preco) })),
     atualizado_em: new Date().toISOString(),
   };
 }
@@ -93,6 +107,7 @@ export default function ProjecaoPage() {
   const [itens, setItens] = useState<ItemForm[]>([{ ...itemVazio }]);
   const [extras, setExtras] = useState<ExtraForm[]>([]);
   const [margem, setMargem] = useState("50");
+  const [ofertas, setOfertas] = useState<OfertaForm[]>([]);
   const [salvando, setSalvando] = useState<"idle" | "sujo" | "salvando" | "salvo" | "conflito">("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const carregado = useRef<string | null>(null);
@@ -122,20 +137,38 @@ export default function ProjecaoPage() {
     setItens(f.itens);
     setExtras(f.extras);
     setMargem(f.margem);
+    setOfertas(f.ofertas);
     setSalvando("idle");
   }, [ativo]);
 
   /** Autosave: qualquer mudança agenda um update em 800ms. */
   const salvar = useCallback(
-    async (id: string, n: string, it: ItemForm[], ex: ExtraForm[], mg: string) => {
+    async (id: string, n: string, it: ItemForm[], ex: ExtraForm[], mg: string, of: OfertaForm[]) => {
       setSalvando("salvando");
       const { data: rows, error } = await supabase
         .from("projecoes")
-        .update(paraBanco(n, it, ex, mg))
+        .update(paraBanco(n, it, ex, mg, of))
         .eq("id", id)
         .eq("atualizado_em", baseAtualizado.current ?? "")
         .select("atualizado_em");
       if (error) {
+        // Migration das ofertas ainda não aplicada neste banco: salva sem o campo
+        // pra planilha nunca perder dado no intervalo entre deploy e migration.
+        if (/ofertas/.test(error.message)) {
+          const semOfertas = { ...paraBanco(n, it, ex, mg, []) } as Record<string, unknown>;
+          delete semOfertas.ofertas;
+          const { data: r2 } = await supabase
+            .from("projecoes")
+            .update(semOfertas)
+            .eq("id", id)
+            .eq("atualizado_em", baseAtualizado.current ?? "")
+            .select("atualizado_em");
+          if (r2 && r2.length) {
+            baseAtualizado.current = r2[0].atualizado_em;
+            setSalvando("salvo");
+            return;
+          }
+        }
         setSalvando("sujo");
         return;
       }
@@ -153,12 +186,34 @@ export default function ProjecaoPage() {
     [qc]
   );
 
-  function agendar(n: string, it: ItemForm[], ex: ExtraForm[], mg: string = margem) {
+  function agendar(
+    n: string,
+    it: ItemForm[],
+    ex: ExtraForm[],
+    mg: string = margem,
+    of: OfertaForm[] = ofertas
+  ) {
     if (!ativo) return;
     setSalvando("sujo");
     if (timer.current) clearTimeout(timer.current);
     const id = ativo.id;
-    timer.current = setTimeout(() => salvar(id, n, it, ex, mg), 800);
+    timer.current = setTimeout(() => salvar(id, n, it, ex, mg, of), 800);
+  }
+
+  function setOferta(ix: number, patch: Partial<OfertaForm>) {
+    setOfertas((arr) => {
+      const novo = arr.map((x, i) => (i === ix ? { ...x, ...patch } : x));
+      agendar(nome, itens, extras, margem, novo);
+      return novo;
+    });
+  }
+
+  function rmOferta(ix: number) {
+    setOfertas((arr) => {
+      const novo = arr.filter((_, i) => i !== ix);
+      agendar(nome, itens, extras, margem, novo);
+      return novo;
+    });
   }
 
   function setMargemA(v: string) {
@@ -258,6 +313,20 @@ export default function ProjecaoPage() {
         }),
       [],
       ...extras.filter((e) => e.descricao.trim() || e.valor).map((e) => ["Custo extra: " + e.descricao, "", "", "", parseValor(e.valor)]),
+      ...ofertas
+        .filter((o) => o.peca && o.leve)
+        .map((o) => {
+          const c = calcOferta(o);
+          return [
+            "Oferta: leve " + o.leve + " " + o.peca,
+            "",
+            "",
+            parseValor(o.preco),
+            c ? c.custoOferta : "",
+            "",
+            c ? c.lucro : "",
+          ];
+        }),
       [],
       ["Investimento total", r.investTotal],
       ["Receita projetada", r.receita],
@@ -288,6 +357,23 @@ export default function ProjecaoPage() {
     const m = Math.min(Math.max(parseValor(margem), 1), 95) / 100;
     const extrasPorPeca = r.totalPecas > 0 ? r.extrasTotal / r.totalPecas : 0;
     return (custo + extrasPorPeca) / (1 - m);
+  }
+
+  /** Números de uma oferta "leve X por Y": margem real sobre custo peça + rateio. */
+  function calcOferta(o: OfertaForm) {
+    const linha = itens.find((i) => i.descricao.trim() && i.descricao.trim() === o.peca);
+    if (!linha) return null;
+    const extrasPorPeca = r.totalPecas > 0 ? r.extrasTotal / r.totalPecas : 0;
+    const custoUn = parseValor(linha.custo) + extrasPorPeca;
+    const leve = Number(o.leve || 0);
+    const preco = parseValor(o.preco);
+    const custoOferta = leve * custoUn;
+    const lucro = preco - custoOferta;
+    const margemOf = preco > 0 && leve > 0 ? (lucro / preco) * 100 : null;
+    const precoCheio = parseValor(linha.preco) > 0 ? leve * parseValor(linha.preco) : null;
+    const m = Math.min(Math.max(parseValor(margem), 1), 95) / 100;
+    const sugerido = leve > 0 && custoOferta > 0 ? custoOferta / (1 - m) : null;
+    return { leve, preco, custoOferta, lucro, margemOf, precoCheio, sugerido };
   }
 
   return (
@@ -589,6 +675,138 @@ export default function ProjecaoPage() {
                 </tr>
               </tfoot>
             </table>
+          </Card>
+
+          {/* Ofertas por quantidade: leve X pague Y — margem real da promoção */}
+          <Card className="!p-0 overflow-hidden">
+            <div className="px-4 pb-1 pt-4 sm:px-5">
+              <h2 className="text-sm font-medium text-muted-foreground">
+                Ofertas — leve mais, pague menos
+              </h2>
+              <p className="text-xs text-muted-foreground/80">
+                Simule o combo e veja a margem real da promoção (custo da peça + rateio dos extras).
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-sm">
+                {ofertas.length > 0 && (
+                  <thead>
+                    <tr className="border-b border-border/70 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      <th className="px-4 py-2 font-medium sm:px-5">Peça</th>
+                      <th className="w-20 px-2 py-2 font-medium">Leve</th>
+                      <th className="w-32 px-2 py-2 font-medium">Por (R$)</th>
+                      <th className="w-24 px-2 py-2 text-right font-medium">Margem</th>
+                      <th className="w-28 px-2 py-2 text-right font-medium">Lucro</th>
+                      <th className="w-12 px-2 py-2"></th>
+                    </tr>
+                  </thead>
+                )}
+                <tbody>
+                  {ofertas.map((o, ix) => {
+                    const c = calcOferta(o);
+                    return (
+                      <tr key={ix} className="border-b border-border/40 align-top">
+                        <td className="px-2 sm:px-3">
+                          <select
+                            aria-label="Peça da oferta"
+                            className={celula + " appearance-none"}
+                            value={o.peca}
+                            onChange={(e) => setOferta(ix, { peca: e.target.value })}
+                          >
+                            <option value="">— escolher peça —</option>
+                            {itens
+                              .filter((i) => i.descricao.trim())
+                              .map((i) => (
+                                <option key={i.descricao} value={i.descricao.trim()}>
+                                  {i.descricao.trim()}
+                                </option>
+                              ))}
+                          </select>
+                        </td>
+                        <td className="px-1">
+                          <input
+                            className={celula + " text-center"}
+                            inputMode="numeric"
+                            placeholder="2"
+                            value={o.leve}
+                            onChange={(e) => setOferta(ix, { leve: e.target.value.replace(/\D/g, "") })}
+                          />
+                        </td>
+                        <td className="px-1">
+                          <input
+                            className={celula}
+                            inputMode="decimal"
+                            placeholder="0,00"
+                            value={o.preco}
+                            onChange={(e) => setOferta(ix, { preco: e.target.value })}
+                          />
+                          {c?.sugerido != null && (
+                            <button
+                              type="button"
+                              title="Aplicar preço que mantém a margem desejada"
+                              onClick={() => setOferta(ix, { preco: c.sugerido!.toFixed(2).replace(".", ",") })}
+                              className="press block px-2.5 pb-1 text-[11px] font-medium text-gold"
+                            >
+                              p/ {margem}%: {brl(c.sugerido)}
+                            </button>
+                          )}
+                          {c?.precoCheio != null && c.preco > 0 && c.precoCheio > c.preco && (
+                            <span className="block px-2.5 pb-1 text-[11px] text-muted-foreground">
+                              cliente economiza {brl(c.precoCheio - c.preco)} (cheio {brl(c.precoCheio)})
+                            </span>
+                          )}
+                        </td>
+                        <td
+                          className={
+                            "font-mono-numbers px-3 pt-3 text-right " +
+                            (c?.margemOf == null
+                              ? "text-muted-foreground"
+                              : c.margemOf >= parseValor(margem)
+                                ? "text-success"
+                                : c.margemOf >= 0
+                                  ? "text-warning"
+                                  : "text-cost")
+                          }
+                        >
+                          {c?.margemOf == null ? "—" : c.margemOf.toFixed(1).replace(".", ",") + "%"}
+                        </td>
+                        <td
+                          className={
+                            "font-mono-numbers px-3 pt-3 text-right " +
+                            (c && c.preco > 0 ? (c.lucro >= 0 ? "text-success" : "text-cost") : "text-muted-foreground")
+                          }
+                        >
+                          {c && c.preco > 0 ? brl(c.lucro) : "—"}
+                        </td>
+                        <td className="px-1 pt-2 text-center">
+                          <button
+                            aria-label="Remover oferta"
+                            onClick={() => rmOferta(ix)}
+                            className="press inline-flex h-8 w-8 items-center justify-center rounded-[var(--r-chip)] text-muted-foreground hover:bg-cost-light hover:text-cost"
+                          >
+                            <Trash2 className="lucide h-3.5 w-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={6} className="px-4 py-2.5 sm:px-5">
+                      <button
+                        onClick={() => {
+                          setOfertas((arr) => [...arr, { peca: "", leve: "2", preco: "" }]);
+                        }}
+                        className="press text-sm font-medium text-gold"
+                      >
+                        + nova oferta
+                      </button>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </Card>
         </>
       )}
