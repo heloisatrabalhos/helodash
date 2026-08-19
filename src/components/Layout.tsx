@@ -6,6 +6,7 @@ import {
   Truck,
   Users,
   Wallet,
+  TrendingUp,
   Settings,
 } from "lucide-react";
 
@@ -21,6 +22,7 @@ const rotas = [
   { to: "/produtos", label: "Produtos", icon: Package },
   { to: "/compras", label: "Compras", icon: Truck },
   { to: "/financeiro", label: "Financeiro", icon: Wallet },
+  { to: "/projecao", label: "Projeção", icon: TrendingUp },
   { to: "/ajustes", label: "Ajustes", icon: Settings },
 ];
 

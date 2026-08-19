@@ -96,6 +96,28 @@ export interface Movimentacao {
   criado_em: string;
 }
 
+export interface ProjecaoItem {
+  descricao: string;
+  qtd: number;
+  custo_unit: number;
+  preco_venda: number;
+}
+
+export interface ProjecaoExtra {
+  descricao: string;
+  valor: number;
+}
+
+export interface Projecao {
+  id: string;
+  nome: string;
+  itens: ProjecaoItem[];
+  extras: ProjecaoExtra[];
+  obs: string | null;
+  criado_em: string;
+  atualizado_em: string;
+}
+
 export interface FinanceiroMensal {
   mes: string;
   faturamento: number;

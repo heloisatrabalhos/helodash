@@ -9,6 +9,7 @@ import Clientes from "@/pages/Clientes";
 import Produtos from "@/pages/Produtos";
 import Compras from "@/pages/Compras";
 import Financeiro from "@/pages/Financeiro";
+import Projecao from "@/pages/Projecao";
 import Ajustes from "@/pages/Ajustes";
 import { Loading } from "@/components/ui";
 
@@ -38,6 +39,7 @@ export default function App() {
               <Route path="produtos" element={<Produtos />} />
               <Route path="compras" element={<Compras />} />
               <Route path="financeiro" element={<Financeiro />} />
+              <Route path="projecao" element={<Projecao />} />
               <Route path="ajustes" element={<Ajustes />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
