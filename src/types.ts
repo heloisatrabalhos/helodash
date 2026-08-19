@@ -113,6 +113,7 @@ export interface Projecao {
   nome: string;
   itens: ProjecaoItem[];
   extras: ProjecaoExtra[];
+  margem_desejada: number;
   obs: string | null;
   criado_em: string;
   atualizado_em: string;

@@ -47,6 +47,7 @@ function calcular(itens: ItemForm[], extras: ExtraForm[]) {
 function paraForm(p: Projecao) {
   return {
     nome: p.nome,
+    margem: p.margem_desejada ? String(p.margem_desejada).replace(".", ",") : "50",
     itens: p.itens.length
       ? p.itens.map((i) => ({
           descricao: i.descricao,
@@ -62,9 +63,10 @@ function paraForm(p: Projecao) {
   };
 }
 
-function paraBanco(nome: string, itens: ItemForm[], extras: ExtraForm[]) {
+function paraBanco(nome: string, itens: ItemForm[], extras: ExtraForm[], margem: string) {
   return {
     nome: nome.trim() || "Sem nome",
+    margem_desejada: Math.min(Math.max(parseValor(margem) || 50, 1), 95),
     itens: itens
       .filter((i) => i.descricao.trim() || i.qtd || i.custo || i.preco)
       .map((i) => ({
@@ -90,9 +92,13 @@ export default function ProjecaoPage() {
   const [nome, setNome] = useState("");
   const [itens, setItens] = useState<ItemForm[]>([{ ...itemVazio }]);
   const [extras, setExtras] = useState<ExtraForm[]>([]);
-  const [salvando, setSalvando] = useState<"idle" | "sujo" | "salvando" | "salvo">("idle");
+  const [margem, setMargem] = useState("50");
+  const [salvando, setSalvando] = useState<"idle" | "sujo" | "salvando" | "salvo" | "conflito">("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const carregado = useRef<string | null>(null);
+  // Versão do cenário carregada — impede uma aba antiga de sobrescrever
+  // o que outro aparelho salvou depois (celular + notebook abertos juntos).
+  const baseAtualizado = useRef<string | null>(null);
 
   const projecoes = useQuery({
     queryKey: ["projecoes"],
@@ -109,31 +115,55 @@ export default function ProjecaoPage() {
   useEffect(() => {
     if (!ativo || carregado.current === ativo.id) return;
     carregado.current = ativo.id;
+    baseAtualizado.current = ativo.atualizado_em;
     setAtivoId(ativo.id);
     const f = paraForm(ativo);
     setNome(f.nome);
     setItens(f.itens);
     setExtras(f.extras);
+    setMargem(f.margem);
     setSalvando("idle");
   }, [ativo]);
 
   /** Autosave: qualquer mudança agenda um update em 800ms. */
   const salvar = useCallback(
-    async (id: string, n: string, it: ItemForm[], ex: ExtraForm[]) => {
+    async (id: string, n: string, it: ItemForm[], ex: ExtraForm[], mg: string) => {
       setSalvando("salvando");
-      const { error } = await supabase.from("projecoes").update(paraBanco(n, it, ex)).eq("id", id);
-      setSalvando(error ? "sujo" : "salvo");
-      if (!error) qc.invalidateQueries({ queryKey: ["projecoes"] });
+      const { data: rows, error } = await supabase
+        .from("projecoes")
+        .update(paraBanco(n, it, ex, mg))
+        .eq("id", id)
+        .eq("atualizado_em", baseAtualizado.current ?? "")
+        .select("atualizado_em");
+      if (error) {
+        setSalvando("sujo");
+        return;
+      }
+      if (rows && rows.length) {
+        baseAtualizado.current = rows[0].atualizado_em;
+        setSalvando("salvo");
+        qc.invalidateQueries({ queryKey: ["projecoes"] });
+      } else {
+        // Outro aparelho salvou depois desta aba: NÃO sobrescreve — recarrega o mais novo.
+        setSalvando("conflito");
+        carregado.current = null;
+        qc.invalidateQueries({ queryKey: ["projecoes"] });
+      }
     },
     [qc]
   );
 
-  function agendar(n: string, it: ItemForm[], ex: ExtraForm[]) {
+  function agendar(n: string, it: ItemForm[], ex: ExtraForm[], mg: string = margem) {
     if (!ativo) return;
     setSalvando("sujo");
     if (timer.current) clearTimeout(timer.current);
     const id = ativo.id;
-    timer.current = setTimeout(() => salvar(id, n, it, ex), 800);
+    timer.current = setTimeout(() => salvar(id, n, it, ex, mg), 800);
+  }
+
+  function setMargemA(v: string) {
+    setMargem(v);
+    agendar(nome, itens, extras, v);
   }
 
   // Flush ao sair da página / fechar aba
@@ -251,6 +281,15 @@ export default function ProjecaoPage() {
 
   const r = calcular(itens, extras);
 
+  /** Preço que atinge a margem desejada, cobrindo o custo da peça + rateio dos extras. */
+  function sugestao(it: ItemForm): number | null {
+    const custo = parseValor(it.custo);
+    if (custo <= 0) return null;
+    const m = Math.min(Math.max(parseValor(margem), 1), 95) / 100;
+    const extrasPorPeca = r.totalPecas > 0 ? r.extrasTotal / r.totalPecas : 0;
+    return (custo + extrasPorPeca) / (1 - m);
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -261,7 +300,9 @@ export default function ProjecaoPage() {
         <div className="flex items-center gap-2">
           {ativo && (
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              {salvando === "salvando" || salvando === "sujo" ? (
+              {salvando === "conflito" ? (
+                <span className="text-warning">atualizado em outro aparelho — recarregando…</span>
+              ) : salvando === "salvando" || salvando === "sujo" ? (
                 <>
                   <Loader2 className="lucide h-3.5 w-3.5 animate-spin" /> salvando…
                 </>
@@ -357,6 +398,42 @@ export default function ProjecaoPage() {
               </div>
             </div>
 
+            {/* Margem desejada → alimenta o preço sugerido de cada linha */}
+            <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-4 pb-3 sm:px-5">
+              <span className="text-sm font-medium text-muted-foreground">Margem desejada:</span>
+              {["30", "40", "50", "60", "70"].map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMargemA(m)}
+                  className={`press rounded-full px-3 py-1 text-sm font-medium transition-colors ${
+                    parseValor(margem) === Number(m)
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-secondary-foreground"
+                  }`}
+                >
+                  {m}%
+                </button>
+              ))}
+              <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                <input
+                  aria-label="Margem personalizada"
+                  inputMode="numeric"
+                  className="w-14 rounded-[var(--r-inner)] border border-input bg-card px-2 py-1 text-center text-sm focus:outline-none focus:ring-2 focus:ring-ring/60"
+                  value={margem}
+                  onChange={(e) => setMargemA(e.target.value.replace(/[^d,]/g, ""))}
+                />
+                %
+              </span>
+              {r.extrasTotal > 0 && r.totalPecas > 0 && (
+                <span className="basis-full text-xs text-muted-foreground">
+                  O preço sugerido cobre o custo da peça <strong>+ {brl(r.extrasTotal / r.totalPecas)}</strong> de
+                  custos extras rateados por peça ({brl(r.extrasTotal)} ÷ {r.totalPecas} peças) — margem e markup
+                  são calculados sobre o custo REAL, não só o da etiqueta.
+                </span>
+              )}
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full min-w-[680px] text-sm">
                 <thead>
@@ -411,6 +488,16 @@ export default function ProjecaoPage() {
                             value={it.preco}
                             onChange={(e) => setItem(ix, { preco: e.target.value })}
                           />
+                          {sugestao(it) !== null && (
+                            <button
+                              type="button"
+                              title="Aplicar preço sugerido"
+                              onClick={() => setItem(ix, { preco: String(sugestao(it)!.toFixed(2)).replace(".", ",") })}
+                              className="press block px-2.5 pb-1 text-[11px] font-medium text-gold"
+                            >
+                              sug. {brl(sugestao(it)!)}
+                            </button>
+                          )}
                         </td>
                         <td className="font-mono-numbers px-3 text-right text-muted-foreground">{investe ? brl(investe) : "—"}</td>
                         <td className={`font-mono-numbers px-3 text-right ${lucroLinha > 0 ? "text-success" : lucroLinha < 0 ? "text-cost" : "text-muted-foreground"}`}>
