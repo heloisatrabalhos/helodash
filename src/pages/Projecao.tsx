@@ -370,10 +370,14 @@ export default function ProjecaoPage() {
     const custoOferta = leve * custoUn;
     const lucro = preco - custoOferta;
     const margemOf = preco > 0 && leve > 0 ? (lucro / preco) * 100 : null;
-    const precoCheio = parseValor(linha.preco) > 0 ? leve * parseValor(linha.preco) : null;
+    const precoUnCheio = parseValor(linha.preco) > 0 ? parseValor(linha.preco) : null;
+    const precoCheio = precoUnCheio != null ? leve * precoUnCheio : null;
+    const precoUnCombo = leve > 0 && preco > 0 ? preco / leve : null;
+    const descontoPct =
+      precoCheio != null && preco > 0 && precoCheio > 0 ? ((precoCheio - preco) / precoCheio) * 100 : null;
     const m = Math.min(Math.max(parseValor(margem), 1), 95) / 100;
     const sugerido = leve > 0 && custoOferta > 0 ? custoOferta / (1 - m) : null;
-    return { leve, preco, custoOferta, lucro, margemOf, precoCheio, sugerido };
+    return { leve, preco, custoOferta, lucro, margemOf, precoCheio, precoUnCheio, precoUnCombo, descontoPct, sugerido };
   }
 
   return (
@@ -740,20 +744,34 @@ export default function ProjecaoPage() {
                             value={o.preco}
                             onChange={(e) => setOferta(ix, { preco: e.target.value })}
                           />
+                          {/* Referencial ancorado no preço de venda da planilha */}
+                          {c?.precoCheio != null && c.preco === 0 && (
+                            <span className="block px-2.5 pb-0.5 text-[11px] text-muted-foreground">
+                              sem desconto: {c.leve}× {brl(c.precoUnCheio)} = {brl(c.precoCheio)}
+                            </span>
+                          )}
+                          {c?.precoUnCombo != null && (
+                            <span className="block px-2.5 pb-0.5 text-[11px] text-muted-foreground">
+                              sai a <strong>{brl(c.precoUnCombo)}/un</strong>
+                              {c.descontoPct != null && c.descontoPct > 0 && (
+                                <>
+                                  {" "}· <strong>{c.descontoPct.toFixed(1).replace(".", ",")}% off</strong> do cheio ({brl(c.precoCheio)})
+                                </>
+                              )}
+                              {c.descontoPct != null && c.descontoPct < 0 && (
+                                <> · acima do preço cheio ({brl(c.precoCheio)})</>
+                              )}
+                            </span>
+                          )}
                           {c?.sugerido != null && (
                             <button
                               type="button"
-                              title="Aplicar preço que mantém a margem desejada"
+                              title="Preço mínimo do combo que mantém a margem desejada"
                               onClick={() => setOferta(ix, { preco: c.sugerido!.toFixed(2).replace(".", ",") })}
                               className="press block px-2.5 pb-1 text-[11px] font-medium text-gold"
                             >
-                              p/ {margem}%: {brl(c.sugerido)}
+                              piso p/ {margem}%: {brl(c.sugerido)}
                             </button>
-                          )}
-                          {c?.precoCheio != null && c.preco > 0 && c.precoCheio > c.preco && (
-                            <span className="block px-2.5 pb-1 text-[11px] text-muted-foreground">
-                              cliente economiza {brl(c.precoCheio - c.preco)} (cheio {brl(c.precoCheio)})
-                            </span>
                           )}
                         </td>
                         <td
