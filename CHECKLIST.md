@@ -37,12 +37,12 @@
 - [x] Fluxo completo testado: fornecedor → produto → compra → cliente → venda → financeiro batendo ✅
 - [x] Conferência manual: faturamento 450, CMV 80, lucro líquido 325, caixa 435 — exatos ✅
 
-## Fase 6 — GitHub + deploy ⏳
+## Fase 6 — GitHub + deploy ✅ (2 pendências suas)
 - [x] `git init` + commit + push pro `heloisatrabalhos/helodash` ✅
 - [ ] ⚠️ Repo está **Public** → trocar pra Private (Settings do repo)
-- [ ] Vercel: você conecta o repo (env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`)
+- [x] Vercel conectado (projeto `helo21/helodash`) + env vars configuradas ✅
 - [ ] GitHub Action de ping semanal (Supabase free não pausa)
-- [ ] Teste no 4G pelo celular
+- [x] Produção testada: login + dados carregando em https://helodash.vercel.app ✅ (teste no 4G: faça pelo celular)
 - [ ] Revogar o PAT e o service_role que vazaram no chat, gerar novos
 
 ---
