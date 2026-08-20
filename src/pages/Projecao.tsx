@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Calculator, Check, Download, Loader2, Plus, Trash2 } from "lucide-react";
+import { Calculator, Check, Download, Loader2, PackagePlus, Plus, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { brl, parseValor } from "@/lib/format";
 import type { Projecao } from "@/types";
@@ -258,6 +258,57 @@ export default function ProjecaoPage() {
     },
   });
 
+  const [catalogoMsg, setCatalogoMsg] = useState<string | null>(null);
+
+  /** Projeção validada → catálogo: cria os produtos das linhas sem duplicar nomes. */
+  async function enviarParaCatalogo() {
+    const linhas = itens.filter((i) => i.descricao.trim() && parseValor(i.custo) > 0);
+    if (!linhas.length) {
+      setCatalogoMsg("Preencha descrição e custo das peças antes de enviar.");
+      return;
+    }
+    const { data: existentes, error: e1 } = await supabase.from("produtos").select("nome");
+    if (e1) {
+      setCatalogoMsg("Não foi possível ler o catálogo. Tente de novo.");
+      return;
+    }
+    const nomesEx = new Set((existentes ?? []).map((p) => p.nome.trim().toLowerCase()));
+    const novos = linhas.filter((i) => !nomesEx.has(i.descricao.trim().toLowerCase()));
+    const pulados = linhas.length - novos.length;
+    if (!novos.length) {
+      setCatalogoMsg("Todas as peças já existem no catálogo — nada a criar.");
+      return;
+    }
+    const ok = await confirmar({
+      titulo: "Enviar pro catálogo?",
+      mensagem:
+        novos.length +
+        " produto(s) serão criados em Produtos com custo e preço desta projeção" +
+        (pulados ? "; " + pulados + " já existem e serão pulados (não sobrescrevo cadastro)." : "."),
+      acao: "Criar " + novos.length,
+    });
+    if (!ok) return;
+    const { error: e2 } = await supabase.from("produtos").insert(
+      novos.map((i) => ({
+        nome: i.descricao.trim(),
+        tipo: "produto",
+        custo_unit: parseValor(i.custo),
+        preco_venda: parseValor(i.preco),
+        estoque_atual: 0,
+      }))
+    );
+    if (e2) {
+      setCatalogoMsg("Erro ao criar: " + e2.message);
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ["produtos"] });
+    setCatalogoMsg(
+      "✓ " + novos.length + " produto(s) criado(s) no catálogo" + (pulados ? " · " + pulados + " já existiam" : "") +
+        ". O estoque entra quando você registrar a compra."
+    );
+    setTimeout(() => setCatalogoMsg(null), 8000);
+  }
+
   function setNomeA(v: string) {
     setNome(v);
     agendar(v, itens, extras);
@@ -470,6 +521,9 @@ export default function ProjecaoPage() {
                 placeholder="Nome do cenário"
               />
               <div className="flex shrink-0 gap-1.5">
+                <Button variant="ghost" onClick={enviarParaCatalogo} title="Criar estas peças no catálogo de Produtos">
+                  <PackagePlus className="lucide h-4 w-4" /> <span className="hidden sm:inline">Pro catálogo</span>
+                </Button>
                 <Button variant="ghost" onClick={exportarCSV} title="Exportar CSV">
                   <Download className="lucide h-4 w-4" /> <span className="hidden sm:inline">Exportar</span>
                 </Button>
@@ -488,6 +542,9 @@ export default function ProjecaoPage() {
               </div>
             </div>
 
+            {catalogoMsg && (
+              <p className="mx-4 mb-2 rounded-[var(--r-control)] bg-gold/10 px-3 py-2 text-sm sm:mx-5">{catalogoMsg}</p>
+            )}
             {/* Margem desejada → alimenta o preço sugerido de cada linha */}
             <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-4 pb-3 sm:px-5">
               <span className="text-sm font-medium text-muted-foreground">Margem desejada:</span>

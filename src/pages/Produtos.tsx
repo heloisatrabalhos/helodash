@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Package, Plus, Search } from "lucide-react";
+import { Package, Plus, Search, Truck } from "lucide-react";
 import { z } from "zod";
 import { supabase } from "@/lib/supabase";
 import { brl, parseValor } from "@/lib/format";
@@ -112,6 +112,49 @@ export default function Produtos() {
     },
   });
 
+  // Compra rápida direto do card do produto — entra em Compras, estoque sobe por trigger
+  const [comprando, setComprando] = useState<Produto | null>(null);
+  const [cQtd, setCQtd] = useState("");
+  const [cCusto, setCCusto] = useState("");
+  const [cFrete, setCFrete] = useState("");
+  const [cErro, setCErro] = useState<string | null>(null);
+
+  function abrirCompra(p: Produto) {
+    setComprando(p);
+    setCQtd("");
+    setCCusto(p.custo_unit > 0 ? String(p.custo_unit).replace(".", ",") : "");
+    setCFrete("");
+    setCErro(null);
+  }
+
+  const compraRapida = useMutation({
+    mutationFn: async () => {
+      const qtd = Number(cQtd || 0);
+      const custo = parseValor(cCusto);
+      if (!comprando) throw new Error("Produto não selecionado");
+      if (!Number.isInteger(qtd) || qtd <= 0) throw new Error("Quantidade deve ser maior que zero");
+      if (custo < 0) throw new Error("Custo não pode ser negativo");
+      const { data: compra, error: e1 } = await supabase
+        .from("compras")
+        .insert({ fornecedor_id: comprando.fornecedor_id, frete: parseValor(cFrete) })
+        .select("id")
+        .single();
+      if (e1) throw new Error(e1.message);
+      const { error: e2 } = await supabase
+        .from("compra_itens")
+        .insert({ compra_id: compra.id, produto_id: comprando.id, qtd, custo_unit: custo });
+      if (e2) {
+        await supabase.from("compras").delete().eq("id", compra.id);
+        throw new Error(e2.message);
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries();
+      setComprando(null);
+    },
+    onError: (e: Error) => setCErro(e.message),
+  });
+
   function abrirNovo() {
     setEditando(null);
     setForm(formVazio);
@@ -195,10 +238,10 @@ export default function Produtos() {
           {filtrados.map((p) => {
             const margem = p.preco_venda > 0 ? ((p.preco_venda - p.custo_unit) / p.preco_venda) * 100 : 0;
             return (
-              <button
+              <div
                 key={p.id}
                 onClick={() => abrirEdicao(p)}
-                className="press-subtle mat-card rounded-[var(--r-card)] p-4 text-left"
+                className="press-subtle mat-card cursor-pointer rounded-[var(--r-card)] p-4 text-left"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -228,11 +271,67 @@ export default function Produtos() {
                     </p>
                   </div>
                 </div>
-              </button>
+                {p.tipo === "produto" && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      abrirCompra(p);
+                    }}
+                    className="press mt-3 flex w-full items-center justify-center gap-1.5 rounded-[var(--r-control)] bg-secondary py-2 text-sm font-medium text-secondary-foreground transition-colors hover:bg-accent"
+                  >
+                    <Truck className="lucide h-4 w-4" /> Comprar
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>
       )}
+
+      {/* Compra rápida */}
+      <Modal open={!!comprando} onClose={() => setComprando(null)} title={comprando ? "Comprar — " + comprando.nome : ""}>
+        <form
+          onSubmit={(e: FormEvent) => {
+            e.preventDefault();
+            setCErro(null);
+            compraRapida.mutate();
+          }}
+          className="flex flex-col gap-4"
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Quantidade">
+              <Input
+                inputMode="numeric"
+                required
+                placeholder="0"
+                value={cQtd}
+                onChange={(e) => setCQtd(e.target.value.replace(/\D/g, ""))}
+              />
+            </Field>
+            <Field label="Custo unitário (R$)">
+              <Input inputMode="decimal" placeholder="0,00" value={cCusto} onChange={(e) => setCCusto(e.target.value)} />
+            </Field>
+          </div>
+          <Field label="Frete (R$)" hint="Opcional">
+            <Input inputMode="decimal" placeholder="0,00" value={cFrete} onChange={(e) => setCFrete(e.target.value)} />
+          </Field>
+          <div className="rounded-[var(--r-control)] bg-muted p-3 text-sm">
+            <div className="flex justify-between font-medium">
+              <span>Total da compra</span>
+              <span className="font-mono-numbers">
+                {brl(Number(cQtd || 0) * parseValor(cCusto) + parseValor(cFrete))}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Vai pra aba Compras — o estoque sobe e o valor sai do caixa automaticamente.
+            </p>
+          </div>
+          {cErro && <p className="text-sm text-cost">{cErro}</p>}
+          <Button type="submit" loading={compraRapida.isPending}>
+            Registrar compra
+          </Button>
+        </form>
+      </Modal>
 
       <Modal open={modal} onClose={fechar} title={editando ? "Editar produto" : "Novo produto"}>
         <form onSubmit={submit} className="flex flex-col gap-4">
