@@ -1,12 +1,14 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { useState } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   ChartNoAxesCombined,
+  MoreHorizontal,
   Package,
   ShoppingBag,
   Truck,
+  TrendingUp,
   Users,
   Wallet,
-  TrendingUp,
   Settings,
 } from "lucide-react";
 
@@ -26,10 +28,17 @@ const rotas = [
   { to: "/ajustes", label: "Ajustes", icon: Settings },
 ];
 
-// No celular só as 5 principais entram na barra; Compras/Ajustes ficam no Resumo.
-const rotasMobile = rotas.filter((r) => !["/compras", "/ajustes"].includes(r.to));
+// Celular: 5 principais na barra; o resto vive no painel "Mais".
+const rotasMobile = rotas.filter((r) =>
+  ["/", "/vendas", "/clientes", "/produtos", "/financeiro"].includes(r.to)
+);
+const rotasMais = rotas.filter((r) => ["/projecao", "/compras", "/ajustes"].includes(r.to));
 
 export default function Layout() {
+  const [maisAberto, setMaisAberto] = useState(false);
+  const { pathname } = useLocation();
+  const emRotaDoMais = rotasMais.some((r) => pathname.startsWith(r.to));
+
   return (
     <div className="flex min-h-dvh">
       {/* Sidebar — desktop */}
@@ -68,6 +77,33 @@ export default function Layout() {
         </div>
       </main>
 
+      {/* Painel "Mais" — mobile */}
+      {maisAberto && (
+        <div className="fixed inset-0 z-40 md:hidden" onClick={() => setMaisAberto(false)}>
+          <div className="mat-scrim absolute inset-0 will-fade animate-materialize" />
+          <div
+            className="mat-float absolute inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] rounded-[var(--r-window)] p-2 animate-fade-in-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {rotasMais.map(({ to, label, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                onClick={() => setMaisAberto(false)}
+                className={({ isActive }) =>
+                  `press flex items-center gap-3 rounded-[var(--r-control)] px-4 py-3.5 text-base ${
+                    isActive ? "bg-primary font-medium text-primary-foreground" : "vibrant"
+                  }`
+                }
+              >
+                <Icon className="lucide h-5 w-5" />
+                {label}
+              </NavLink>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Bottom nav — mobile */}
       <nav
         className="mat-chrome fixed inset-x-0 bottom-0 z-40 flex justify-around border-t border-border/50 pb-[env(safe-area-inset-bottom)] md:hidden"
@@ -78,6 +114,7 @@ export default function Layout() {
             key={to}
             to={to}
             end={fim}
+            onClick={() => setMaisAberto(false)}
             className={({ isActive }) =>
               `press flex min-w-[56px] flex-col items-center gap-0.5 px-2 py-2 text-[11px] ${
                 isActive ? "font-medium text-foreground" : "text-muted-foreground"
@@ -92,6 +129,17 @@ export default function Layout() {
             )}
           </NavLink>
         ))}
+        <button
+          onClick={() => setMaisAberto((v) => !v)}
+          aria-label="Mais opções"
+          aria-expanded={maisAberto}
+          className={`press flex min-w-[56px] flex-col items-center gap-0.5 px-2 py-2 text-[11px] ${
+            emRotaDoMais || maisAberto ? "font-medium text-foreground" : "text-muted-foreground"
+          }`}
+        >
+          <MoreHorizontal className={`lucide h-6 w-6 ${emRotaDoMais || maisAberto ? "text-gold" : ""}`} />
+          Mais
+        </button>
       </nav>
     </div>
   );
